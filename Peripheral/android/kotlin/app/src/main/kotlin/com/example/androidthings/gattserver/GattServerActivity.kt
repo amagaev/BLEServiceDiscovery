@@ -37,14 +37,11 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.ParcelUuid
-import android.text.format.DateFormat
 import android.util.Log
 import android.view.WindowManager
 import android.widget.TextView
 import com.google.gson.Gson
 import java.io.UnsupportedEncodingException
-
-import java.util.Date
 
 private const val TAG = "GattServerActivity"
 
@@ -113,93 +110,89 @@ class GattServerActivity : Activity() {
             }
         }
 
-        override fun onNotificationSent(device: BluetoothDevice?, status: Int) {
+        override fun onNotificationSent(device: BluetoothDevice?, status: Int) = synchronized(lock) {
             Log.i(TAG, "onNotificationSent")
+            lock.notifyAll()
         }
 
         override fun onExecuteWrite(device: BluetoothDevice?, requestId: Int, execute: Boolean) {
             Log.i(TAG, "onExecuteWrite")
         }
 
-//        private fun sendData(data: String, device: BluetoothDevice) {
-//            val txCharacteristic = bluetoothGattServer?.getService(TransferProfile.TRANSFER_SERVICE)?.getCharacteristic(TransferProfile.TRANSFER_TX_CHARACTERISTIC)
-//
-//            txCharacteristic?.setValue(data)
-//            bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
-//
-//            txCharacteristic?.setValue("EOM")
-//            bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
-//        }
+        override fun onMtuChanged(device: BluetoothDevice?, mtu: Int) {
+            super.onMtuChanged(device, mtu)
+            mtuSize = mtu
+        }
+
+        private var mtuSize: Int = 23
+
+        private val lock = Object()
+
+        private fun performSend(message: String, device: BluetoothDevice) = synchronized(lock) {
+            // Process message
+            val txCharacteristic = bluetoothGattServer?.getService(TransferProfile.TRANSFER_SERVICE)?.getCharacteristic(TransferProfile.TRANSFER_TX_CHARACTERISTIC)
+
+            Log.i(TAG, "sendData mtu: $mtuSize")
+
+            val packetSize = mtuSize - 3
+
+            var posBegin = 0
+            val size = message.length
+            var posEnd = if (size> packetSize) packetSize else size
+
+            // Process, sending parts if they are greater than the maximum
+
+            do {
+                val part = message.substring (posBegin, posEnd)
+                if (part.length> 0) {
+
+                    //if (debugExtra) {
+                    //    logD ("send part ($ {part.length}) -> $ {part.extExpandStr ()}")
+                    //}
+                    var data = ByteArray (0)
+                    try {
+                        data = part.toByteArray (charset ("UTF-8"))
+                    } catch (e: UnsupportedEncodingException) {
+                        e.printStackTrace ()
+                    }
+
+                    Log.i(TAG, "send packet")
+
+                    txCharacteristic?.setValue(data)
+                    bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
+
+                    lock.wait()
+
+                    if (posEnd == size) {
+                        break
+                    }
+
+                    posBegin = posEnd
+                    posEnd = posBegin + packetSize
+                    if (posEnd > size) {
+                        posEnd = size
+                    }
+                } else {
+                    break
+                }
+
+            } while (posEnd <= size)
+
+            Log.i(TAG, "send EOM")
+            txCharacteristic?.setValue("EOM")
+            bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
+        }
 
         private fun sendData (message: String, device: BluetoothDevice) {
 
-            val txCharacteristic = bluetoothGattServer?.getService(TransferProfile.TRANSFER_SERVICE)?.getCharacteristic(TransferProfile.TRANSFER_TX_CHARACTERISTIC)
-
-//            txCharacteristic?.setValue(data)
-//            bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
-
-            val MAX_SIZE = 512
-
             // In separate Thread
-
             try {
 
                 object: Thread () {
                     override fun run () {
 
-                        // Process message
-
-                        var posBegin = 0
-                        val size = message.length
-                        var posEnd = if (size> MAX_SIZE) MAX_SIZE else size
-
-                        // Process, sending parts if they are greater than the maximum
-
-                        do {
-                            val part = message.substring (posBegin, posEnd)
-                            if (part.length> 0) {
-
-                                //if (debugExtra) {
-                                //    logD ("send part ($ {part.length}) -> $ {part.extExpandStr ()}")
-                                //}
-                                var data = ByteArray (0)
-                                try {
-                                    data = part.toByteArray (charset ("UTF-8"))
-                                } catch (e: UnsupportedEncodingException) {
-                                    e.printStackTrace ()
-                                }
-
-                                txCharacteristic?.setValue(data)
-                                bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
-
-                                if (posEnd == size) {
-                                    break
-                                }
-
-                                posBegin = posEnd
-                                posEnd = posBegin + MAX_SIZE
-                                if (posEnd > size) {
-                                    posEnd = size
-                                }
-                            } else {
-                                break
-                            }
-
-                            // Wait a while // Android workaround
-                            try {
-                                Thread.sleep (200)
-                            } catch (e: InterruptedException) {
-                                e.printStackTrace ()
-                            }
-
-                        } while (posEnd <= size)
-                        Thread.sleep (200)
-
-                        txCharacteristic?.setValue("EOM")
-                        bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
-
+                        performSend(message, device)
                     }
-
                 } .start ()
 
             } catch (e: Exception) {

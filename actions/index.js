@@ -109,21 +109,15 @@ export const readCharacteristic = () => {
   };
 };
 
-const performTimeConsumingTask = async () => {
-  return new Promise(resolve =>
-    setTimeout(() => {
-      resolve('result');
-    }, 10),
-  );
-};
-
 export const writeCharacteristic = (characteristic, text) => {
   console.log('writing: ', text);
   return async (dispatch, getState, DeviceManager) => {
-    // const state = getState();
+    const state = getState();
     text = text;
     let buffer = str2ab(text);
-    let packetsize = 512;
+    let mtu = state.BLEs.connectedPeripheral.mtu;
+    console.log('MTU:', mtu);
+    let packetsize = mtu - 3;
     let offset = 0;
     let packetlength = packetsize;
     do {
@@ -135,15 +129,13 @@ export const writeCharacteristic = (characteristic, text) => {
       let packet = buffer.slice(offset, packetlength);
       console.log('packet: ', packet);
       let base64packet = Base64.btoa(String.fromCharCode.apply(null, packet));
-      characteristic.writeWithoutResponse(base64packet);
+      await characteristic.writeWithoutResponse(base64packet);
       offset += packetsize;
-      await performTimeConsumingTask();
     } while (offset < buffer.length);
-    await performTimeConsumingTask();
     let base64packet = Base64.btoa(
       String.fromCharCode.apply(null, str2ab('EOM')),
     );
-    characteristic.writeWithoutResponse(base64packet);
+    await characteristic.writeWithoutResponse(base64packet);
   };
 };
 

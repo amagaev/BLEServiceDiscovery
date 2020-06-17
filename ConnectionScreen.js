@@ -74,9 +74,6 @@ class ConnectionScreen extends Component {
               var jsonOffer = JSON.stringify(offer);
               jsonOffer = jsonOffer.replace(/\\n/g, '');
               jsonOffer = jsonOffer.replace(/\\r/g, '');
-              // const escaped = JSON.stringify(jsonOffer);
-              console.log('jsonOffer', jsonOffer);
-              // console.log('Escaped JSON', escaped);
               this.props.writeCharacteristic(
                 this.props.transferTxCharacteristic,
                 jsonOffer,
