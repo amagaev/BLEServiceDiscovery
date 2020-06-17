@@ -1,12 +1,15 @@
 import React, {Component, useState} from 'react';
 import update from 'immutability-helper';
-import {SafeAreaView, StyleSheet, Text, Button, View} from 'react-native';
-import {connect} from 'react-redux';
 import {
-  RTCPeerConnection,
-  mediaDevices,
-  RTCView,
-} from 'react-native-webrtc';
+  ScrollView,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  Button,
+  View,
+} from 'react-native';
+import {connect} from 'react-redux';
+import {RTCPeerConnection, mediaDevices, RTCView} from 'react-native-webrtc';
 import {
   connectToPeripheral,
   monitorCharacteristic,
@@ -14,7 +17,6 @@ import {
 } from './actions';
 
 class ConnectionScreen extends Component {
-
   constructor(props) {
     super(props);
     this.state = {streamUrl: ''};
@@ -25,56 +27,66 @@ class ConnectionScreen extends Component {
   }
 
   onEchoCommandButtonClick = () => {
-    this.props.monitorCharacteristic(this.props.transferRxCharacteristic);
-    this.props.writeCharacteristic(this.props.transferTxCharacteristic, 'Echo');
-
-    var yourConn = new RTCPeerConnection();    
+    var yourConn = new RTCPeerConnection();
     let isFront = true;
 
     mediaDevices.enumerateDevices().then(sourceInfos => {
       let videoSourceId;
       for (let i = 0; i < sourceInfos.length; i++) {
-          const sourceInfo = sourceInfos[i];
-          if (
-              sourceInfo.kind == 'videoinput' &&
-              sourceInfo.facing == (isFront ? 'front' : 'environment')
-          ) {
-              videoSourceId = sourceInfo.deviceId;
-          }
+        const sourceInfo = sourceInfos[i];
+        if (
+          sourceInfo.kind == 'videoinput' &&
+          sourceInfo.facing == (isFront ? 'front' : 'environment')
+        ) {
+          videoSourceId = sourceInfo.deviceId;
+        }
       }
       mediaDevices
-          .getUserMedia({
-              audio: true,
-              video: {
-                  mandatory: {
-                      minWidth: 500, // Provide your own width, height and frame rate here
-                      minHeight: 300,
-                      minFrameRate: 30,
-                  },
-                  facingMode: isFront ? 'user' : 'environment',
-                  optional: videoSourceId ? [{sourceId: videoSourceId}] : [],
-              },
-          })
-          .then(stream => {
-              // Got stream!
-              console.log('Set local stream');
-              //localStream = stream;
-              var state = update(this.state, {streamUrl: {$set: stream.toURL()}});
-              this.setState(state);
-              // setup stream listening
-              console.log('ADD STREAM')
-              yourConn.addStream(stream);
+        .getUserMedia({
+          audio: true,
+          video: {
+            mandatory: {
+              minWidth: 500, // Provide your own width, height and frame rate here
+              minHeight: 300,
+              minFrameRate: 30,
+            },
+            facingMode: isFront ? 'user' : 'environment',
+            optional: videoSourceId ? [{sourceId: videoSourceId}] : [],
+          },
+        })
+        .then(stream => {
+          // Got stream!
+          console.log('Set local stream');
+          //localStream = stream;
+          var state = update(this.state, {streamUrl: {$set: stream.toURL()}});
+          this.setState(state);
+          // setup stream listening
+          console.log('ADD STREAM');
+          yourConn.addStream(stream);
 
-              yourConn.createOffer().then(offer => {
-                yourConn.setLocalDescription(offer).then(() => {
-                  console.log('OFFER IS CREATED');  
-                  console.log(offer);
-                });
+          yourConn.createOffer().then(offer => {
+            yourConn.setLocalDescription(offer).then(() => {
+              console.log('OFFER IS CREATED');
+              console.log(offer);
+              this.props.monitorCharacteristic(
+                this.props.transferRxCharacteristic,
+              );
+              var jsonOffer = JSON.stringify(offer);
+              jsonOffer = jsonOffer.replace(/\\n/g, '');
+              jsonOffer = jsonOffer.replace(/\\r/g, '');
+              // const escaped = JSON.stringify(jsonOffer);
+              console.log('jsonOffer', jsonOffer);
+              // console.log('Escaped JSON', escaped);
+              this.props.writeCharacteristic(
+                this.props.transferTxCharacteristic,
+                jsonOffer,
+              );
             });
-          })
-          .catch(error => {
-              // Log error
           });
+        })
+        .catch(error => {
+          // Log error
+        });
     });
   };
 
@@ -91,9 +103,11 @@ class ConnectionScreen extends Component {
       this.props.transferRxCharacteristic &&
       this.props.transferTxCharacteristic ? (
         <>
-          <Text style={styles.messageText}>
-            {this.props.readCharacteristicValue}
-          </Text>
+          <ScrollView style={styles.scrollView}>
+            <Text style={styles.messageText}>
+              {this.props.readCharacteristicValue}
+            </Text>
+          </ScrollView>
           <View style={styles.buttonContainer}>
             <Button
               title="Send Echo"
@@ -107,25 +121,23 @@ class ConnectionScreen extends Component {
         </>
       ) : null;
     return (
-        <SafeAreaView style={styles.container}>
-          <View style={{width: 500, height: 150 }}>
-              <Text>Your Video</Text>
-              <RTCView
-                streamURL={this.state.streamUrl}
-                style={styles.localVideo}/>
-          </View>
-          <View style={styles.statusContainer}>
-            <View
-              style={
-                this.props.connectedPeripheral
-                  ? styles.connectedStatusView
-                  : styles.disconnectedStatusView
-              }
-            />
-            <Text style={styles.statusText}>{this.props.peripheralStatus}</Text>
-          </View>
-          {transferContainer}
-        </SafeAreaView>
+      <SafeAreaView style={styles.container}>
+        <View style={{width: 500, height: 150}}>
+          <Text>Your Video</Text>
+          <RTCView streamURL={this.state.streamUrl} style={styles.localVideo} />
+        </View>
+        <View style={styles.statusContainer}>
+          <View
+            style={
+              this.props.connectedPeripheral
+                ? styles.connectedStatusView
+                : styles.disconnectedStatusView
+            }
+          />
+          <Text style={styles.statusText}>{this.props.peripheralStatus}</Text>
+        </View>
+        {transferContainer}
+      </SafeAreaView>
     );
   }
 }
