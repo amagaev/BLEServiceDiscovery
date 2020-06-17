@@ -139,10 +139,27 @@ export const writeCharacteristic = (characteristic, text) => {
   };
 };
 
+var connectedSubscription = null;
+
 export const connectToPeripheral = () => {
   return async (dispatch, getState, DeviceManager) => {
     const device = await retrievePeripheral(dispatch, getState, DeviceManager);
     await connectPeripheral(device, dispatch, getState, DeviceManager);
+    if (connectedSubscription) {
+      connectedSubscription.remove();
+      connectedSubscription = null;
+    }
+    connectedSubscription = DeviceManager.onDeviceDisconnected(
+      device.id,
+      (error, device) => {
+        console.log('onDeviceDisconnected');
+        dispatch(changePeripheralStatus('Idle'));
+        dispatch(disconnectedPeripheral());
+        connectedSubscription.remove();
+        connectedSubscription = null;
+        dispatch(connectToPeripheral());
+      },
+    );
     await discoverTransferCharacteristics(
       device,
       dispatch,

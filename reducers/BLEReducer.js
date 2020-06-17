@@ -13,11 +13,14 @@ const BLEReducer = (state = INITIAL_STATE, action) => {
   switch (action.type) {
     case 'CHARACTERISTIC_DID_READ':
       return update(state, {readCharacteristicValue: {$set: action.value}});
-
     case 'CONNECTED_PERIPHERAL':
       return update(state, {connectedPeripheral: {$set: action.value}});
     case 'DISCONNECTED_PERIPHERAL':
-      return update(state, {connectedPeripheral: {$set: null}});
+      state = update(state, {connectedPeripheral: {$set: null}});
+      state = update(state, {transferRxCharacteristic: {$set: null}});
+      state = update(state, {transferTxCharacteristic: {$set: null}});
+      state = update(state, {readCharacteristicValue: {$set: ''}});
+      return state;
     case 'CHANGE_PERIPHERAL_STATUS':
       return update(state, {peripheralStatus: {$set: action.status}});
     case 'CHARACTERISTIC_RX_READY':
