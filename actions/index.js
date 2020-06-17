@@ -117,6 +117,9 @@ export const writeCharacteristic = (characteristic, text) => {
     let buffer = str2ab(text);
     let mtu = state.BLEs.connectedPeripheral.mtu;
     console.log('MTU:', mtu);
+    if (!mtu) {
+      mtu = 23;
+    }
     let packetsize = mtu - 3;
     let offset = 0;
     let packetlength = packetsize;
@@ -160,6 +163,7 @@ export const connectToPeripheral = () => {
         dispatch(connectToPeripheral());
       },
     );
+    await device.requestMTU(517);
     await discoverTransferCharacteristics(
       device,
       dispatch,
