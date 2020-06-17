@@ -37,14 +37,17 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.ParcelUuid
-import android.text.format.DateFormat
 import android.util.Log
 import android.view.WindowManager
 import android.widget.TextView
-
-import java.util.Date
+import com.google.gson.Gson
+import java.io.UnsupportedEncodingException
 
 private const val TAG = "GattServerActivity"
+
+data class DummyOffer(
+        val type: String
+)
 
 class GattServerActivity : Activity() {
     private lateinit var textView: TextView
@@ -107,22 +110,95 @@ class GattServerActivity : Activity() {
             }
         }
 
-        override fun onNotificationSent(device: BluetoothDevice?, status: Int) {
+        override fun onNotificationSent(device: BluetoothDevice?, status: Int) = synchronized(lock) {
             Log.i(TAG, "onNotificationSent")
+            lock.notifyAll()
         }
 
         override fun onExecuteWrite(device: BluetoothDevice?, requestId: Int, execute: Boolean) {
             Log.i(TAG, "onExecuteWrite")
         }
 
-        private fun sendData(data: String, device: BluetoothDevice) {
+        override fun onMtuChanged(device: BluetoothDevice?, mtu: Int) {
+            super.onMtuChanged(device, mtu)
+            mtuSize = mtu
+        }
+
+        private var mtuSize: Int = 23
+
+        private val lock = Object()
+
+        private fun performSend(message: String, device: BluetoothDevice) = synchronized(lock) {
+            // Process message
             val txCharacteristic = bluetoothGattServer?.getService(TransferProfile.TRANSFER_SERVICE)?.getCharacteristic(TransferProfile.TRANSFER_TX_CHARACTERISTIC)
 
-            txCharacteristic?.setValue(data)
-            bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
+            Log.i(TAG, "sendData mtu: $mtuSize")
 
+            val packetSize = mtuSize - 3
+
+            var posBegin = 0
+            val size = message.length
+            var posEnd = if (size> packetSize) packetSize else size
+
+            // Process, sending parts if they are greater than the maximum
+
+            do {
+                val part = message.substring (posBegin, posEnd)
+                if (part.length> 0) {
+
+                    //if (debugExtra) {
+                    //    logD ("send part ($ {part.length}) -> $ {part.extExpandStr ()}")
+                    //}
+                    var data = ByteArray (0)
+                    try {
+                        data = part.toByteArray (charset ("UTF-8"))
+                    } catch (e: UnsupportedEncodingException) {
+                        e.printStackTrace ()
+                    }
+
+                    Log.i(TAG, "send packet")
+
+                    txCharacteristic?.setValue(data)
+                    bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
+
+                    lock.wait()
+
+                    if (posEnd == size) {
+                        break
+                    }
+
+                    posBegin = posEnd
+                    posEnd = posBegin + packetSize
+                    if (posEnd > size) {
+                        posEnd = size
+                    }
+                } else {
+                    break
+                }
+
+            } while (posEnd <= size)
+
+            Log.i(TAG, "send EOM")
             txCharacteristic?.setValue("EOM")
             bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
+        }
+
+        private fun sendData (message: String, device: BluetoothDevice) {
+
+            // In separate Thread
+            try {
+
+                object: Thread () {
+                    override fun run () {
+
+                        performSend(message, device)
+                    }
+                } .start ()
+
+            } catch (e: Exception) {
+                // Part of my library - commented for this example
+                // this.activity.extShowException (e)
+            }
         }
 
         override fun onCharacteristicWriteRequest(device: BluetoothDevice?, requestId: Int, characteristic: BluetoothGattCharacteristic?, preparedWrite: Boolean, responseNeeded: Boolean, offset: Int, value: ByteArray?) {
@@ -145,14 +221,18 @@ class GattServerActivity : Activity() {
                         Log.i(TAG, string)
                         if (string == "EOM") {
 
+
                             val response: String
-                            val command = data.toString(Charsets.UTF_8)
-                            if (command.toUpperCase() == "Echo".toUpperCase()) {
-                                response = command
-                            } else if (command.toUpperCase() == "Config".toUpperCase()) {
-                                response = textView.text as String
+                            val message = data.toString(Charsets.UTF_8)
+                            data = ByteArray(0)
+                            Log.i(TAG, message)
+
+                            var gson = Gson()
+                            val request = gson?.fromJson(message, DummyOffer::class.java)
+                            if (request?.type == "offer") {
+                                response = message
                             } else {
-                                response = "Unknown"
+                                response = "Unknown Command"
                             }
 
                             data = ByteArray(0)
