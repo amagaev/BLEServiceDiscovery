@@ -26,7 +26,7 @@ class ConnectionScreen extends Component {
     this.props.connectToPeripheral();
   }
 
-  onEchoCommandButtonClick = () => {
+  onStartWebrtcCommandButtonClick = () => {
     var yourConn = new RTCPeerConnection();
     let isFront = true;
 
@@ -72,8 +72,6 @@ class ConnectionScreen extends Component {
                 this.props.transferRxCharacteristic,
               );
               var jsonOffer = JSON.stringify(offer);
-              jsonOffer = jsonOffer.replace(/\\n/g, '');
-              jsonOffer = jsonOffer.replace(/\\r/g, '');
               this.props.writeCharacteristic(
                 this.props.transferTxCharacteristic,
                 jsonOffer,
@@ -85,14 +83,6 @@ class ConnectionScreen extends Component {
           // Log error
         });
     });
-  };
-
-  onConfigCommandButtonClick = () => {
-    this.props.monitorCharacteristic(this.props.transferRxCharacteristic);
-    this.props.writeCharacteristic(
-      this.props.transferTxCharacteristic,
-      'Config',
-    );
   };
 
   render() {
@@ -107,19 +97,15 @@ class ConnectionScreen extends Component {
           </ScrollView>
           <View style={styles.buttonContainer}>
             <Button
-              title="Send Echo"
-              onPress={() => this.onEchoCommandButtonClick()}
-            />
-            <Button
-              title="Get Config"
-              onPress={() => this.onConfigCommandButtonClick()}
+              title="Start WebRTC"
+              onPress={() => this.onStartWebrtcCommandButtonClick()}
             />
           </View>
         </>
       ) : null;
     return (
       <SafeAreaView style={styles.container}>
-        <View style={{width: 500, height: 150}}>
+        <View style={styles.videoContainer}>
           <Text>Your Video</Text>
           <RTCView streamURL={this.state.streamUrl} style={styles.localVideo} />
         </View>
@@ -161,6 +147,9 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: 'white',
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
   },
   buttonContainer: {
     backgroundColor: 'white',
@@ -172,9 +161,16 @@ const styles = StyleSheet.create({
   statusContainer: {
     backgroundColor: 'white',
     flexDirection: 'row',
-    justifyContent: 'center',
+    alignItems: 'center',
     flex: 1,
     marginTop: 30,
+  },
+  videoContainer: {
+    backgroundColor: 'white',
+    alignItems: 'center',
+    flex: 1,
+    marginTop: 30,
+    width: '100%',
   },
   messageText: {
     fontSize: 16,

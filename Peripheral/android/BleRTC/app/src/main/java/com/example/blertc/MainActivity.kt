@@ -447,7 +447,7 @@ class MainActivity : AppCompatActivity() {
             rtcClient.onRemoteSessionReceived(sessionDescription)
             Log.i("TAG", "answer")
             rtcClient.answer(sdpObserver)
-            remote_view_loading.isGone = true
+//            remote_view_loading.isGone = true
             // TODO
             sendData("Offer proceeded, answer created", device)
         }
