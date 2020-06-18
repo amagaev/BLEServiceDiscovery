@@ -21,8 +21,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isGone
+import com.example.androidthings.gattserver.TransferProfile
 import com.google.gson.Gson
-import com.google.gson.JsonObject
+import com.google.gson.GsonBuilder
 import io.ktor.util.KtorExperimentalAPI
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -30,7 +31,6 @@ import org.webrtc.IceCandidate
 import org.webrtc.MediaStream
 import org.webrtc.SessionDescription
 import java.io.UnsupportedEncodingException
-import com.example.androidthings.gattserver.TransferProfile
 
 @ExperimentalCoroutinesApi
 @KtorExperimentalAPI
@@ -430,16 +430,12 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(bluetoothReceiver)
     }
 
-    data class CompatibleSessionDescription(
-            val type: String,
-            val sdp: String
-    )
-
     fun onDataReceived(data: String, device: BluetoothDevice) {
         Log.i("TAG", "onDataReceived")
-        val gson = Gson()
-        val compatibleSessionDescription = gson.fromJson(data, CompatibleSessionDescription::class.java)
-        val sessionDescription = SessionDescription(SessionDescription.Type.fromCanonicalForm(compatibleSessionDescription.type), compatibleSessionDescription.sdp)
+        val gson: Gson = GsonBuilder()
+            .registerTypeAdapter(SessionDescription::class.java, SessionDescriptionDeserializer())
+            .create()
+        val sessionDescription = gson.fromJson(data, SessionDescription::class.java)
 
         // Handle
         if (sessionDescription.type == SessionDescription.Type.OFFER) {
