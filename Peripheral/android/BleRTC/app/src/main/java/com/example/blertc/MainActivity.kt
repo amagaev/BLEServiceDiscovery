@@ -71,6 +71,71 @@ class MainActivity : AppCompatActivity() {
             Log.w("MainActivity", "LE Advertise Failed: $errorCode")
         }
     }
+
+
+    private var mtuSize: Int = 23
+    private val lock = Object()
+
+    private fun performSend(message: String, device: BluetoothDevice) = synchronized(lock) {
+        val txCharacteristic = bluetoothGattServer?.getService(TransferProfile.TRANSFER_SERVICE)
+                ?.getCharacteristic(TransferProfile.TRANSFER_TX_CHARACTERISTIC)
+        Log.i("", "sendData mtu: $mtuSize")
+        val packetSize = mtuSize - 3
+
+        var posBegin = 0
+        val size = message.length
+        var posEnd = if (size > packetSize) packetSize else size
+
+        do {
+            val part = message.substring(posBegin, posEnd)
+            if (part.length > 0) {
+                var data = ByteArray(0)
+                try {
+                    data = part.toByteArray(charset("UTF-8"))
+                } catch (e: UnsupportedEncodingException) {
+                    e.printStackTrace()
+                }
+
+                Log.i("TAG", "send packet")
+                txCharacteristic?.setValue(data)
+                bluetoothGattServer?.notifyCharacteristicChanged(
+                        device,
+                        txCharacteristic,
+                        false
+                )
+                lock.wait()
+                if (posEnd == size) {
+                    break
+                }
+                posBegin = posEnd
+                posEnd = posBegin + packetSize
+                if (posEnd > size) {
+                    posEnd = size
+                }
+            } else {
+                break
+            }
+        } while (posEnd <= size)
+        Log.i("TAG", "send EOM")
+        txCharacteristic?.setValue("EOM")
+        bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
+    }
+
+    fun sendData(message: String, device: BluetoothDevice) {
+        try {
+            object : Thread() {
+                override fun run() {
+
+                    performSend(message, device)
+                }
+            }.start()
+
+        } catch (e: Exception) {
+            // Part of my library - commented for this example
+            // this.activity.extShowException (e)
+        }
+    }
+
     private val gattServerCallback = object : BluetoothGattServerCallback() {
         private var data: ByteArray = ByteArray(0)
 
@@ -99,69 +164,6 @@ class MainActivity : AppCompatActivity() {
             Log.i("TAG", "onExecuteWrite")
         }
 
-        private var mtuSize: Int = 23
-        private val lock = Object()
-
-        private fun performSend(message: String, device: BluetoothDevice) = synchronized(lock) {
-            val txCharacteristic = bluetoothGattServer?.getService(TransferProfile.TRANSFER_SERVICE)
-                ?.getCharacteristic(TransferProfile.TRANSFER_TX_CHARACTERISTIC)
-            Log.i("", "sendData mtu: $mtuSize")
-            val packetSize = mtuSize - 3
-
-            var posBegin = 0
-            val size = message.length
-            var posEnd = if (size > packetSize) packetSize else size
-
-            do {
-                val part = message.substring(posBegin, posEnd)
-                if (part.length > 0) {
-                    var data = ByteArray(0)
-                    try {
-                        data = part.toByteArray(charset("UTF-8"))
-                    } catch (e: UnsupportedEncodingException) {
-                        e.printStackTrace()
-                    }
-
-                    Log.i("TAG", "send packet")
-                    txCharacteristic?.setValue(data)
-                    bluetoothGattServer?.notifyCharacteristicChanged(
-                        device,
-                        txCharacteristic,
-                        false
-                    )
-                    lock.wait()
-                    if (posEnd == size) {
-                        break
-                    }
-                    posBegin = posEnd
-                    posEnd = posBegin + packetSize
-                    if (posEnd > size) {
-                        posEnd = size
-                    }
-                } else {
-                    break
-                }
-            } while (posEnd <= size)
-            Log.i("TAG", "send EOM")
-            txCharacteristic?.setValue("EOM")
-            bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
-        }
-
-        private fun sendData(message: String, device: BluetoothDevice) {
-            try {
-                object : Thread() {
-                    override fun run() {
-
-                        performSend(message, device)
-                    }
-                }.start()
-
-            } catch (e: Exception) {
-                // Part of my library - commented for this example
-                // this.activity.extShowException (e)
-            }
-        }
-
         override fun onCharacteristicWriteRequest(
             device: BluetoothDevice?,
             requestId: Int,
@@ -184,25 +186,12 @@ class MainActivity : AppCompatActivity() {
                         val string = it.toString(Charsets.UTF_8)
                         Log.i("TAG", string)
                         if (string == "EOM") {
-                            val response: String
                             val message = data.toString(Charsets.UTF_8)
                             data = ByteArray(0)
                             Log.i("TAG", message)
-                            onDataReceived(message)
-//                            val gson = Gson()
-//                            val reader = JsonReader(StringReader(message))
-//                            reader.isLenient = true
-//                            val request: DummyOffer = gson.fromJson(reader, DummyOffer::class.java)
-//
-//                            if (request.type == "offer") {
-//                                response = message
-//                            } else {
-//                                response = "Unknown Command"
-//                            }
-//                            data = ByteArray(0)
-//                            if (device != null) {
-//                                sendData(response, device)
-//                            }
+                            if (device != null) {
+                                onDataReceived(message, device)
+                            }
                         } else {
                             data += it
                         }
@@ -446,7 +435,7 @@ class MainActivity : AppCompatActivity() {
             val sdp: String
     )
 
-    fun onDataReceived(data: String) {
+    fun onDataReceived(data: String, device: BluetoothDevice) {
         Log.i("TAG", "onDataReceived")
         val gson = Gson()
         val compatibleSessionDescription = gson.fromJson(data, CompatibleSessionDescription::class.java)
@@ -459,6 +448,8 @@ class MainActivity : AppCompatActivity() {
             Log.i("TAG", "answer")
             rtcClient.answer(sdpObserver)
             remote_view_loading.isGone = true
+            // TODO
+            sendData("Offer proceeded, answer created", device)
         }
     }
 }
