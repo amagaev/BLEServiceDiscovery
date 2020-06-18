@@ -21,7 +21,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isGone
-import com.example.blertc.ble.TransferProfile
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import io.ktor.util.KtorExperimentalAPI
@@ -31,6 +30,7 @@ import org.webrtc.IceCandidate
 import org.webrtc.MediaStream
 import org.webrtc.SessionDescription
 import java.io.UnsupportedEncodingException
+import com.example.androidthings.gattserver.TransferProfile
 
 @ExperimentalCoroutinesApi
 @KtorExperimentalAPI
@@ -441,12 +441,22 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(bluetoothReceiver)
     }
 
+    data class CompatibleSessionDescription(
+            val type: String,
+            val sdp: String
+    )
+
     fun onDataReceived(data: String) {
-        val message = data.replace("sdp", "description")
+        Log.i("TAG", "onDataReceived")
         val gson = Gson()
-        val jsonObject = gson.fromJson(message, JsonObject::class.java)
-        if (jsonObject.has("type") && jsonObject.get("type").asString == "offer") {
-            rtcClient.onRemoteSessionReceived(gson.fromJson(jsonObject, SessionDescription::class.java))
+        val compatibleSessionDescription = gson.fromJson(data, CompatibleSessionDescription::class.java)
+        val sessionDescription = SessionDescription(SessionDescription.Type.fromCanonicalForm(compatibleSessionDescription.type), compatibleSessionDescription.sdp)
+
+        // Handle
+        if (sessionDescription.type == SessionDescription.Type.OFFER) {
+            Log.i("TAG", "OFFER")
+            rtcClient.onRemoteSessionReceived(sessionDescription)
+            Log.i("TAG", "answer")
             rtcClient.answer(sdpObserver)
             remote_view_loading.isGone = true
         }
