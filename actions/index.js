@@ -301,7 +301,46 @@ async function createWebRTCOffer(dispatch, getState) {
   return offer;
 }
 
-var subscription = null;
+const awaitMessageFromCharacteristic = (characteristic, timeout) =>
+  new Promise((resolve, reject) => {
+    var buffer = new Uint8Array();
+    var subscription = null;
+
+    setTimeout(() => {
+      subscription.remove();
+      buffer = new Uint8Array();
+      reject({error: 'Timeout'});
+    }, timeout);
+
+    subscription = characteristic.monitor((error, ch) => {
+      if (error) {
+        console.log(error);
+
+        subscription.remove();
+        buffer = new Uint8Array();
+        reject(error);
+      } else {
+        const decodedValue = Base64.atob(ch.value);
+        console.log('READ CHAR', decodedValue);
+        if (decodedValue === 'EOM') {
+          let message = ab2str(buffer);
+          console.log('NOTIFY', message);
+
+          subscription.remove();
+          buffer = new Uint8Array();
+          resolve(message);
+        } else {
+          var newData = str2ab(decodedValue);
+          var newBuffer = new Uint8Array(buffer.length + newData.length);
+          newBuffer.set(buffer);
+          newBuffer.set(newData, buffer.length);
+          buffer = newBuffer;
+          console.log('READ CHAR', ab2str(buffer));
+        }
+      }
+    });
+  });
+
 export const setupWebRTCConnection = () => {
   return async (dispatch, getState, DeviceManager) => {
     const state = getState();
@@ -310,10 +349,6 @@ export const setupWebRTCConnection = () => {
     let transferTxCharacteristic = state.BLEs.transferTxCharacteristic;
 
     let offer = await createWebRTCOffer(dispatch);
-
-    if (subscription) {
-      subscription.remove();
-    }
 
     console.log('Sending Offer');
     dispatch(webRTCConnectionStatus('Sending Offer'));
@@ -325,18 +360,16 @@ export const setupWebRTCConnection = () => {
 
     console.log('Waiting Answer');
     dispatch(webRTCConnectionStatus('Waiting Answer'));
-
-    subscription = subscribeToCharacteristic(
+    let answer = await awaitMessageFromCharacteristic(
       transferRxCharacteristic,
-      message => {
-        let answerObject = JSON.parse(message);
-        console.log('Answer Received');
-        console.log('SDP: ', answerObject.sdp);
-        dispatch(
-          webRTCConnectionStatus(`Answer Received, SDP: ${answerObject.sdp}`),
-        );
-        // TODO Handle Answer
-      },
+      10000,
     );
+    let answerObject = JSON.parse(answer);
+    console.log('Answer Received');
+    console.log('SDP: ', answerObject.sdp);
+    dispatch(
+      webRTCConnectionStatus(`Answer Received, SDP: ${answerObject.sdp}`),
+    );
+    // TODO Handle Answer
   };
 };
