@@ -228,6 +228,7 @@ class MainActivity : AppCompatActivity() {
             Log.i("TAG", "onDescriptorWriteRequest")
         }
     }
+
     private val sdpObserver = object : AppSdpObserver() {
         override fun onCreateSuccess(p0: SessionDescription?) {
             super.onCreateSuccess(p0)
@@ -295,7 +296,7 @@ class MainActivity : AppCompatActivity() {
         rtcClient.initSurfaceView(local_view)
         rtcClient.startLocalVideoCapture(local_view)
         signallingClient = SignallingClient(createSignallingClientListener())
-        call_button.setOnClickListener { rtcClient.call(sdpObserver) }
+        //call_button.setOnClickListener { rtcClient.call(sdpObserver) }
     }
 
     private fun createSignallingClientListener() = object : SignallingClientListener {
@@ -442,10 +443,11 @@ class MainActivity : AppCompatActivity() {
             Log.i("TAG", "OFFER")
             rtcClient.onRemoteSessionReceived(sessionDescription)
             Log.i("TAG", "answer")
-            rtcClient.answer(sdpObserver)
-//            remote_view_loading.isGone = true
-            // TODO
-            sendData("Offer proceeded, answer created", device)
+            rtcClient.answer(object : AppSdpObserver() {
+                override fun onCreateSuccess(p0: SessionDescription?) {
+                    super.onCreateSuccess(p0)
+                    sendData(p0!!.description, device)
+                }})
         }
     }
 }
