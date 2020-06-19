@@ -435,6 +435,7 @@ class MainActivity : AppCompatActivity() {
         Log.i("TAG", "onDataReceived")
         val gson: Gson = GsonBuilder()
             .registerTypeAdapter(SessionDescription::class.java, SessionDescriptionDeserializer())
+            .registerTypeAdapter(SessionDescription::class.java, SessionDescriptionSerializer())
             .create()
         val sessionDescription = gson.fromJson(data, SessionDescription::class.java)
 
@@ -446,7 +447,7 @@ class MainActivity : AppCompatActivity() {
             rtcClient.answer(object : AppSdpObserver() {
                 override fun onCreateSuccess(p0: SessionDescription?) {
                     super.onCreateSuccess(p0)
-                    sendData(p0!!.description, device)
+                    sendData(gson.toJson(p0!!), device)
                 }})
         }
     }

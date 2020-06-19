@@ -1,11 +1,9 @@
 package com.example.blertc
 
-import com.google.gson.JsonDeserializationContext
-import com.google.gson.JsonDeserializer
-import com.google.gson.JsonElement
-import com.google.gson.JsonParseException
+import com.google.gson.*
 import org.webrtc.SessionDescription
 import java.lang.reflect.Type
+
 
 class SessionDescriptionDeserializer : JsonDeserializer<SessionDescription> {
     @Throws(JsonParseException::class)
@@ -18,5 +16,18 @@ class SessionDescriptionDeserializer : JsonDeserializer<SessionDescription> {
         val sdp = jsonObject["sdp"].asString
 
         return SessionDescription(SessionDescription.Type.fromCanonicalForm(type), sdp)
+    }
+}
+
+class SessionDescriptionSerializer : JsonSerializer<SessionDescription> {
+    override fun serialize(
+        src: SessionDescription,
+        typeOfSrc: Type?,
+        context: JsonSerializationContext?
+    ): JsonElement? {
+        val jsonObject = JsonObject()
+        jsonObject.addProperty("sdp", src.description)
+        jsonObject.addProperty("type", src.type.canonicalForm())
+        return jsonObject
     }
 }
