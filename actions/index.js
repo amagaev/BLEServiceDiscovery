@@ -1,6 +1,8 @@
 import Base64 from '../Base64';
 import React from 'react';
 
+import {RTCPeerConnection, mediaDevices} from 'react-native-webrtc';
+
 export const connectedPeripheral = value => ({
   type: 'CONNECTED_PERIPHERAL',
   value,
@@ -30,6 +32,16 @@ export const characteristicDidRead = value => ({
   value,
 });
 
+export const webRTCLocalStreamUrl = value => ({
+  type: 'WEBRTC_LOCAL_STREAM_URL',
+  value,
+});
+
+export const webRTCConnectionStatus = value => ({
+  type: 'WEBRTC_CONNECTION_STATUS',
+  value,
+});
+
 function str2ab(str) {
   var bufView = new Uint8Array(str.length);
   for (var i = 0, strLen = str.length; i < strLen; i++) {
@@ -47,38 +59,18 @@ function ab2str(buffer) {
   return str;
 }
 
-export const monitorCharacteristic = characteristic => {
-  return (dispatch, getState, DeviceManager) => {
-    subscribeToCharacteristic(
-      characteristic,
-      dispatch,
-      getState,
-      DeviceManager,
-    );
-  };
-};
-
-var subscription = null;
-
-async function subscribeToCharacteristic(
-  characteristic,
-  dispatch,
-  getState,
-  DeviceManager,
-) {
+function subscribeToCharacteristic(characteristic, onMessageReceived) {
   var buffer = new Uint8Array();
-  if (subscription) {
-    subscription.remove();
-  }
-  subscription = characteristic.monitor((error, ch) => {
+  let subscription = characteristic.monitor((error, ch) => {
     if (error) {
       console.log(error);
     } else {
       const decodedValue = Base64.atob(ch.value);
       console.log('READ CHAR', decodedValue);
       if (decodedValue === 'EOM') {
-        console.log('NOTIFY', ab2str(buffer));
-        dispatch(characteristicDidRead(ab2str(buffer)));
+        let message = ab2str(buffer);
+        console.log('NOTIFY', message);
+        onMessageReceived(message);
         buffer = new Uint8Array();
       } else {
         var newData = str2ab(decodedValue);
@@ -90,6 +82,7 @@ async function subscribeToCharacteristic(
       }
     }
   });
+  return subscription;
 }
 
 export const readCharacteristic = () => {
@@ -109,38 +102,34 @@ export const readCharacteristic = () => {
   };
 };
 
-export const writeCharacteristic = (characteristic, text) => {
-  console.log('writing: ', text);
-  return async (dispatch, getState, DeviceManager) => {
-    const state = getState();
-    text = text;
-    let buffer = str2ab(text);
-    let mtu = state.BLEs.connectedPeripheral.mtu;
-    console.log('MTU:', mtu);
-    if (!mtu) {
-      mtu = 23;
+async function writeCharacteristic(device, characteristic, text) {
+  text = text;
+  let buffer = str2ab(text);
+  let mtu = device.mtu;
+  console.log('MTU:', mtu);
+  if (!mtu) {
+    mtu = 23;
+  }
+  let packetsize = mtu - 3;
+  let offset = 0;
+  let packetlength = packetsize;
+  do {
+    if (offset + packetsize > buffer.length) {
+      packetlength = buffer.length;
+    } else {
+      packetlength = offset + packetsize;
     }
-    let packetsize = mtu - 3;
-    let offset = 0;
-    let packetlength = packetsize;
-    do {
-      if (offset + packetsize > buffer.length) {
-        packetlength = buffer.length;
-      } else {
-        packetlength = offset + packetsize;
-      }
-      let packet = buffer.slice(offset, packetlength);
-      console.log('packet: ', packet);
-      let base64packet = Base64.btoa(String.fromCharCode.apply(null, packet));
-      await characteristic.writeWithoutResponse(base64packet);
-      offset += packetsize;
-    } while (offset < buffer.length);
-    let base64packet = Base64.btoa(
-      String.fromCharCode.apply(null, str2ab('EOM')),
-    );
+    let packet = buffer.slice(offset, packetlength);
+    console.log('packet: ', packet);
+    let base64packet = Base64.btoa(String.fromCharCode.apply(null, packet));
     await characteristic.writeWithoutResponse(base64packet);
-  };
-};
+    offset += packetsize;
+  } while (offset < buffer.length);
+  let base64packet = Base64.btoa(
+    String.fromCharCode.apply(null, str2ab('EOM')),
+  );
+  await characteristic.writeWithoutResponse(base64packet);
+}
 
 var connectedSubscription = null;
 
@@ -271,3 +260,83 @@ async function discoverTransferCharacteristics(
     }
   }
 }
+
+async function createWebRTCOffer(dispatch, getState) {
+  var yourConn = new RTCPeerConnection();
+  let isFront = true;
+
+  let sourceInfos = await mediaDevices.enumerateDevices();
+  let videoSourceId;
+  for (let i = 0; i < sourceInfos.length; i++) {
+    const sourceInfo = sourceInfos[i];
+    if (
+      sourceInfo.kind == 'videoinput' &&
+      sourceInfo.facing == (isFront ? 'front' : 'environment')
+    ) {
+      videoSourceId = sourceInfo.deviceId;
+    }
+  }
+  let stream = await mediaDevices.getUserMedia({
+    audio: true,
+    video: {
+      mandatory: {
+        minWidth: 500, // Provide your own width, height and frame rate here
+        minHeight: 300,
+        minFrameRate: 30,
+      },
+      facingMode: isFront ? 'user' : 'environment',
+      optional: videoSourceId ? [{sourceId: videoSourceId}] : [],
+    },
+  });
+  // Got stream!
+  console.log('Set local stream');
+  // setup stream listening
+  console.log('ADD STREAM');
+  yourConn.addStream(stream);
+  dispatch(webRTCLocalStreamUrl(stream.toURL()));
+  let offer = await yourConn.createOffer();
+  await yourConn.setLocalDescription(offer);
+  console.log('OFFER IS CREATED');
+  console.log(offer);
+  return offer;
+}
+
+var subscription = null;
+export const setupWebRTCConnection = () => {
+  return async (dispatch, getState, DeviceManager) => {
+    const state = getState();
+    let device = state.BLEs.connectedPeripheral;
+    let transferRxCharacteristic = state.BLEs.transferRxCharacteristic;
+    let transferTxCharacteristic = state.BLEs.transferTxCharacteristic;
+
+    let offer = await createWebRTCOffer(dispatch);
+
+    if (subscription) {
+      subscription.remove();
+    }
+
+    console.log('Sending Offer');
+    dispatch(webRTCConnectionStatus('Sending Offer'));
+    var jsonOffer = JSON.stringify(offer);
+
+    console.log('TX', transferTxCharacteristic);
+    console.log('jsonOffer', jsonOffer);
+    await writeCharacteristic(device, transferTxCharacteristic, jsonOffer);
+
+    console.log('Waiting Answer');
+    dispatch(webRTCConnectionStatus('Waiting Answer'));
+
+    subscription = subscribeToCharacteristic(
+      transferRxCharacteristic,
+      message => {
+        let answerObject = JSON.parse(message);
+        console.log('Answer Received');
+        console.log('SDP: ', answerObject.sdp);
+        dispatch(
+          webRTCConnectionStatus(`Answer Received, SDP: ${answerObject.sdp}`),
+        );
+        // TODO Handle Answer
+      },
+    );
+  };
+};

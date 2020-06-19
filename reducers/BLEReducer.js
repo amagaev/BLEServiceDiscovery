@@ -6,7 +6,8 @@ const INITIAL_STATE = {
   transferRxCharacteristic: null,
   transferTxCharacteristic: null,
 
-  readCharacteristicValue: '',
+  webRTCLocalStreamUrl: null,
+  webRTCConnectionStatus: '',
 };
 
 const BLEReducer = (state = INITIAL_STATE, action) => {
@@ -20,6 +21,8 @@ const BLEReducer = (state = INITIAL_STATE, action) => {
       state = update(state, {transferRxCharacteristic: {$set: null}});
       state = update(state, {transferTxCharacteristic: {$set: null}});
       state = update(state, {readCharacteristicValue: {$set: ''}});
+
+      state = update(state, {webRTCConnectionStatus: {$set: ''}});
       return state;
     case 'CHANGE_PERIPHERAL_STATUS':
       return update(state, {peripheralStatus: {$set: action.status}});
@@ -27,6 +30,10 @@ const BLEReducer = (state = INITIAL_STATE, action) => {
       return update(state, {transferRxCharacteristic: {$set: action.value}});
     case 'CHARACTERISTIC_TX_READY':
       return update(state, {transferTxCharacteristic: {$set: action.value}});
+    case 'WEBRTC_LOCAL_STREAM_URL':
+      return update(state, {webRTCLocalStreamUrl: {$set: action.value}});
+    case 'WEBRTC_CONNECTION_STATUS':
+      return update(state, {webRTCConnectionStatus: {$set: action.value}});
     default:
       return state;
   }

@@ -9,90 +9,38 @@ import {
   View,
 } from 'react-native';
 import {connect} from 'react-redux';
-import {RTCPeerConnection, mediaDevices, RTCView} from 'react-native-webrtc';
-import {
-  connectToPeripheral,
-  monitorCharacteristic,
-  writeCharacteristic,
-} from './actions';
+import {RTCView} from 'react-native-webrtc';
+import {connectToPeripheral, setupWebRTCConnection} from './actions';
 
 class ConnectionScreen extends Component {
-  constructor(props) {
-    super(props);
-    this.state = {streamUrl: ''};
-  }
-
   componentDidMount() {
     this.props.connectToPeripheral();
   }
 
   onStartWebrtcCommandButtonClick = () => {
-    var yourConn = new RTCPeerConnection();
-    let isFront = true;
-
-    mediaDevices.enumerateDevices().then(sourceInfos => {
-      let videoSourceId;
-      for (let i = 0; i < sourceInfos.length; i++) {
-        const sourceInfo = sourceInfos[i];
-        if (
-          sourceInfo.kind == 'videoinput' &&
-          sourceInfo.facing == (isFront ? 'front' : 'environment')
-        ) {
-          videoSourceId = sourceInfo.deviceId;
-        }
-      }
-      mediaDevices
-        .getUserMedia({
-          audio: true,
-          video: {
-            mandatory: {
-              minWidth: 500, // Provide your own width, height and frame rate here
-              minHeight: 300,
-              minFrameRate: 30,
-            },
-            facingMode: isFront ? 'user' : 'environment',
-            optional: videoSourceId ? [{sourceId: videoSourceId}] : [],
-          },
-        })
-        .then(stream => {
-          // Got stream!
-          console.log('Set local stream');
-          //localStream = stream;
-          var state = update(this.state, {streamUrl: {$set: stream.toURL()}});
-          this.setState(state);
-          // setup stream listening
-          console.log('ADD STREAM');
-          yourConn.addStream(stream);
-
-          yourConn.createOffer().then(offer => {
-            yourConn.setLocalDescription(offer).then(() => {
-              console.log('OFFER IS CREATED');
-              console.log(offer);
-              this.props.monitorCharacteristic(
-                this.props.transferRxCharacteristic,
-              );
-              var jsonOffer = JSON.stringify(offer);
-              this.props.writeCharacteristic(
-                this.props.transferTxCharacteristic,
-                jsonOffer,
-              );
-            });
-          });
-        })
-        .catch(error => {
-          // Log error
-        });
-    });
+    this.props.setupWebRTCConnection();
   };
 
   render() {
+    const webrtcContainer = this.props.webRTCLocalStreamUrl ? (
+      <>
+        <View style={styles.videoContainer}>
+          <Text>Your Video</Text>
+          <RTCView
+            streamURL={this.props.webRTCLocalStreamUrl}
+            style={styles.localVideo}
+          />
+        </View>
+      </>
+    ) : null;
+
     const transferContainer =
       this.props.transferRxCharacteristic &&
       this.props.transferTxCharacteristic ? (
         <>
           <ScrollView style={styles.scrollView}>
             <Text style={styles.messageText}>
-              {this.props.readCharacteristicValue}
+              {this.props.webRTCConnectionStatus}
             </Text>
           </ScrollView>
           <View style={styles.buttonContainer}>
@@ -105,10 +53,7 @@ class ConnectionScreen extends Component {
       ) : null;
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.videoContainer}>
-          <Text>Your Video</Text>
-          <RTCView streamURL={this.state.streamUrl} style={styles.localVideo} />
-        </View>
+        {webrtcContainer}
         <View style={styles.statusContainer}>
           <View
             style={
@@ -131,16 +76,15 @@ function mapStateToProps(state) {
     connectedPeripheral: state.BLEs.connectedPeripheral,
     transferRxCharacteristic: state.BLEs.transferRxCharacteristic,
     transferTxCharacteristic: state.BLEs.transferTxCharacteristic,
-    readCharacteristicValue: state.BLEs.readCharacteristicValue,
+
+    webRTCLocalStreamUrl: state.BLEs.webRTCLocalStreamUrl,
+    webRTCConnectionStatus: state.BLEs.webRTCConnectionStatus,
   };
 }
 
 const mapDispatchToProps = dispatch => ({
   connectToPeripheral: () => dispatch(connectToPeripheral()),
-  monitorCharacteristic: characteristic =>
-    dispatch(monitorCharacteristic(characteristic)),
-  writeCharacteristic: (characteristic, text) =>
-    dispatch(writeCharacteristic(characteristic, text)),
+  setupWebRTCConnection: () => dispatch(setupWebRTCConnection()),
 });
 
 const styles = StyleSheet.create({
