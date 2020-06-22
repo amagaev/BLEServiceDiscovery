@@ -131,8 +131,6 @@ class RTCClient(
         }, constraints)
     }
 
-    fun call(sdpObserver: SdpObserver) = peerConnection?.call(sdpObserver)
-
     fun answer(sdpObserver: SdpObserver) = peerConnection?.answer(sdpObserver)
 
     fun onRemoteSessionReceived(sessionDescription: SessionDescription) {

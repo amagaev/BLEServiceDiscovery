@@ -24,6 +24,7 @@ import androidx.core.view.isGone
 import com.example.androidthings.gattserver.TransferProfile
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonObject
 import io.ktor.util.KtorExperimentalAPI
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -79,7 +80,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun performSend(message: String, device: BluetoothDevice) = synchronized(lock) {
         val txCharacteristic = bluetoothGattServer?.getService(TransferProfile.TRANSFER_SERVICE)
-                ?.getCharacteristic(TransferProfile.TRANSFER_TX_CHARACTERISTIC)
+            ?.getCharacteristic(TransferProfile.TRANSFER_TX_CHARACTERISTIC)
         Log.i("", "sendData mtu: $mtuSize")
         val packetSize = mtuSize - 3
 
@@ -100,9 +101,9 @@ class MainActivity : AppCompatActivity() {
                 Log.i("TAG", "send packet")
                 txCharacteristic?.setValue(data)
                 bluetoothGattServer?.notifyCharacteristicChanged(
-                        device,
-                        txCharacteristic,
-                        false
+                    device,
+                    txCharacteristic,
+                    false
                 )
                 lock.wait()
                 if (posEnd == size) {
@@ -143,6 +144,7 @@ class MainActivity : AppCompatActivity() {
         override fun onConnectionStateChange(device: BluetoothDevice, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.i("TAG", "BluetoothDevice CONNECTED: $device")
+                registeredDevices.add(device)
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 Log.i("TAG", "BluetoothDevice DISCONNECTED: $device")
                 //Remove device from any active subscriptions
@@ -283,7 +285,15 @@ class MainActivity : AppCompatActivity() {
             object : PeerConnectionObserver() {
                 override fun onIceCandidate(p0: IceCandidate?) {
                     super.onIceCandidate(p0)
-//                    signallingClient.send(p0)
+                    val iceGson: Gson = GsonBuilder()
+                        .registerTypeAdapter(
+                            IceCandidate::class.java,
+                            ICEDeserializer()
+                        )
+                        .registerTypeAdapter(IceCandidate::class.java, ICESerializer())
+                        .create()
+
+                    sendData(iceGson.toJson(p0!!), registeredDevices.first())
                     rtcClient.addIceCandidate(p0)
                 }
 
@@ -297,7 +307,6 @@ class MainActivity : AppCompatActivity() {
         rtcClient.initSurfaceView(local_view)
         rtcClient.startLocalVideoCapture(local_view)
         signallingClient = SignallingClient(createSignallingClientListener())
-        //call_button.setOnClickListener { rtcClient.call(sdpObserver) }
     }
 
     private fun createSignallingClientListener() = object : SignallingClientListener {
@@ -434,22 +443,40 @@ class MainActivity : AppCompatActivity() {
 
     fun onDataReceived(data: String, device: BluetoothDevice) {
         Log.i(BleRTCTag, "onDataReceived")
-        val gson: Gson = GsonBuilder()
-            .registerTypeAdapter(SessionDescription::class.java, SessionDescriptionDeserializer())
-            .registerTypeAdapter(SessionDescription::class.java, SessionDescriptionSerializer())
-            .create()
-        val sessionDescription = gson.fromJson(data, SessionDescription::class.java)
 
-        // Handle
-        if (sessionDescription.type == SessionDescription.Type.OFFER) {
-            Log.i(BleRTCTag, "Offer")
-            rtcClient.onRemoteSessionReceived(sessionDescription)
-            rtcClient.answer(object : AppSdpObserver() {
-                override fun onCreateSuccess(p0: SessionDescription?) {
-                    super.onCreateSuccess(p0)
-                    Log.i(BleRTCTag, "Send answer")
-                    sendData(gson.toJson(p0!!), device)
-                }})
+        val gson = Gson()
+        val jsonObject = gson.fromJson(data, JsonObject::class.java)
+
+        if (jsonObject.has("candidate")) {
+            val iceGson: Gson = GsonBuilder()
+                .registerTypeAdapter(
+                    IceCandidate::class.java,
+                    ICEDeserializer()
+                )
+                .registerTypeAdapter(IceCandidate::class.java, ICESerializer())
+                .create()
+            val candidate = iceGson.fromJson(data, IceCandidate::class.java)
+            rtcClient.addIceCandidate(candidate)
+        } else {
+            val offerGson: Gson = GsonBuilder()
+                .registerTypeAdapter(
+                    SessionDescription::class.java,
+                    SessionDescriptionDeserializer()
+                )
+                .registerTypeAdapter(SessionDescription::class.java, SessionDescriptionSerializer())
+                .create()
+            val sessionDescription = offerGson.fromJson(data, SessionDescription::class.java)
+            if (sessionDescription.type == SessionDescription.Type.OFFER) {
+                Log.i(BleRTCTag, "Offer")
+                rtcClient.onRemoteSessionReceived(sessionDescription)
+                rtcClient.answer(object : AppSdpObserver() {
+                    override fun onCreateSuccess(p0: SessionDescription?) {
+                        super.onCreateSuccess(p0)
+                        Log.i(BleRTCTag, "Send answer")
+                        sendData(offerGson.toJson(p0!!), device)
+                    }
+                })
+            }
         }
     }
 }
