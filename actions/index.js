@@ -1,7 +1,10 @@
 import Base64 from '../Base64';
 import React from 'react';
 
-import {RTCPeerConnection, mediaDevices} from 'react-native-webrtc';
+import {
+  RTCPeerConnection,
+  mediaDevices,
+  RTCSessionDescription} from 'react-native-webrtc';
 
 export const connectedPeripheral = value => ({
   type: 'CONNECTED_PERIPHERAL',
@@ -66,7 +69,7 @@ function subscribeToCharacteristic(characteristic, onMessageReceived) {
       console.log(error);
     } else {
       const decodedValue = Base64.atob(ch.value);
-      console.log('READ CHAR', decodedValue);
+      //console.log('READ CHAR', decodedValue);
       if (decodedValue === 'EOM') {
         let message = ab2str(buffer);
         console.log('NOTIFY', message);
@@ -78,7 +81,7 @@ function subscribeToCharacteristic(characteristic, onMessageReceived) {
         newBuffer.set(buffer);
         newBuffer.set(newData, buffer.length);
         buffer = newBuffer;
-        console.log('READ CHAR', ab2str(buffer));
+        //console.log('READ CHAR', ab2str(buffer));
       }
     }
   });
@@ -96,7 +99,7 @@ export const readCharacteristic = () => {
       )
       .then(characteristic => {
         const decodedValue = Base64.atob(characteristic.value);
-        console.log('READ CHAR', decodedValue);
+        //console.log('READ CHAR', decodedValue);
         dispatch(characteristicDidRead(decodedValue));
       });
   };
@@ -120,7 +123,7 @@ async function writeCharacteristic(device, characteristic, text) {
       packetlength = offset + packetsize;
     }
     let packet = buffer.slice(offset, packetlength);
-    console.log('packet: ', packet);
+    //console.log('packet: ', packet);
     let base64packet = Base64.btoa(String.fromCharCode.apply(null, packet));
     await characteristic.writeWithoutResponse(base64packet);
     offset += packetsize;
@@ -261,8 +264,7 @@ async function discoverTransferCharacteristics(
   }
 }
 
-async function createWebRTCOffer(dispatch, getState) {
-  var yourConn = new RTCPeerConnection();
+async function createWebRTCOffer(dispatch, yourConn, getState) {
   let isFront = true;
 
   let sourceInfos = await mediaDevices.enumerateDevices();
@@ -297,7 +299,7 @@ async function createWebRTCOffer(dispatch, getState) {
   let offer = await yourConn.createOffer();
   await yourConn.setLocalDescription(offer);
   console.log('OFFER IS CREATED');
-  console.log(offer);
+  //console.log(offer);
   return offer;
 }
 
@@ -321,10 +323,10 @@ const awaitMessageFromCharacteristic = (characteristic, timeout) =>
         reject(error);
       } else {
         const decodedValue = Base64.atob(ch.value);
-        console.log('READ CHAR', decodedValue);
+        //console.log('READ CHAR', decodedValue);
         if (decodedValue === 'EOM') {
           let message = ab2str(buffer);
-          console.log('NOTIFY', message);
+          //console.log('NOTIFY', message);
 
           subscription.remove();
           buffer = new Uint8Array();
@@ -335,7 +337,7 @@ const awaitMessageFromCharacteristic = (characteristic, timeout) =>
           newBuffer.set(buffer);
           newBuffer.set(newData, buffer.length);
           buffer = newBuffer;
-          console.log('READ CHAR', ab2str(buffer));
+          //console.log('READ CHAR', ab2str(buffer));
         }
       }
     });
@@ -347,15 +349,16 @@ export const setupWebRTCConnection = () => {
     let device = state.BLEs.connectedPeripheral;
     let transferRxCharacteristic = state.BLEs.transferRxCharacteristic;
     let transferTxCharacteristic = state.BLEs.transferTxCharacteristic;
+    var yourConn = new RTCPeerConnection();
 
-    let offer = await createWebRTCOffer(dispatch);
+    let offer = await createWebRTCOffer(dispatch, yourConn);
 
     console.log('Sending Offer');
     dispatch(webRTCConnectionStatus('Sending Offer'));
     var jsonOffer = JSON.stringify(offer);
 
-    console.log('TX', transferTxCharacteristic);
-    console.log('jsonOffer', jsonOffer);
+    //console.log('TX', transferTxCharacteristic);
+    //console.log('jsonOffer', jsonOffer);
     await writeCharacteristic(device, transferTxCharacteristic, jsonOffer);
 
     console.log('Waiting Answer');
@@ -366,10 +369,30 @@ export const setupWebRTCConnection = () => {
     );
     let answerObject = JSON.parse(answer);
     console.log('Answer Received');
-    console.log('SDP: ', answerObject.sdp);
+    //console.log('SDP: ', answerObject.sdp);
     dispatch(
       webRTCConnectionStatus(`Answer Received, SDP: ${answerObject.sdp}`),
     );
     // TODO Handle Answer
+
+    try {
+      console.log('answerObject.sdp = ', answerObject.sdp);
+      var description = new RTCSessionDescription(answerObject.sdp)
+      console.log('new RTCSessionDescription SUCCESS');
+      await yourConn.setRemoteDescription(description);
+    } catch (e) {
+      console.log('Error: ', e);
+    }
+
+    console.log('Send ICE candidates');
+    yourConn.onicecandidate = async (event) => {
+      console.log('onicecandidate');
+      if (event.candidate) {
+        var jsonCandidate = JSON.stringify(event.candidate);
+        console.log('TX', transferTxCharacteristic);
+        console.log('jsonCandidate', jsonCandidate);
+        await writeCharacteristic(device, transferTxCharacteristic, jsonCandidate);
+      }
+    };
   };
 };

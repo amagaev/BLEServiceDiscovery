@@ -44,6 +44,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var signallingClient: SignallingClient
     private lateinit var rtcClient: RTCClient
     private lateinit var bluetoothManager: BluetoothManager
+    private val BleRTCTag: String = "BleRTC"
     private var bluetoothGattServer: BluetoothGattServer? = null
     private val registeredDevices = mutableSetOf<BluetoothDevice>()
     private val bluetoothReceiver = object : BroadcastReceiver() {
@@ -432,7 +433,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun onDataReceived(data: String, device: BluetoothDevice) {
-        Log.i("TAG", "onDataReceived")
+        Log.i(BleRTCTag, "onDataReceived")
         val gson: Gson = GsonBuilder()
             .registerTypeAdapter(SessionDescription::class.java, SessionDescriptionDeserializer())
             .registerTypeAdapter(SessionDescription::class.java, SessionDescriptionSerializer())
@@ -441,12 +442,12 @@ class MainActivity : AppCompatActivity() {
 
         // Handle
         if (sessionDescription.type == SessionDescription.Type.OFFER) {
-            Log.i("TAG", "OFFER")
+            Log.i(BleRTCTag, "Offer")
             rtcClient.onRemoteSessionReceived(sessionDescription)
-            Log.i("TAG", "answer")
             rtcClient.answer(object : AppSdpObserver() {
                 override fun onCreateSuccess(p0: SessionDescription?) {
                     super.onCreateSuccess(p0)
+                    Log.i(BleRTCTag, "Send answer")
                     sendData(gson.toJson(p0!!), device)
                 }})
         }
