@@ -4,7 +4,8 @@ import React from 'react';
 import {
   RTCPeerConnection,
   mediaDevices,
-  RTCSessionDescription} from 'react-native-webrtc';
+  RTCSessionDescription,
+} from 'react-native-webrtc';
 
 export const connectedPeripheral = value => ({
   type: 'CONNECTED_PERIPHERAL',
@@ -105,7 +106,11 @@ export const readCharacteristic = () => {
   };
 };
 
+const {default: PQueue} = require('p-queue');
+const queue = new PQueue({concurrency: 1});
+
 async function writeCharacteristic(device, characteristic, text) {
+  console.log('Writing to characteristic');
   text = text;
   let buffer = str2ab(text);
   let mtu = device.mtu;
@@ -132,6 +137,7 @@ async function writeCharacteristic(device, characteristic, text) {
     String.fromCharCode.apply(null, str2ab('EOM')),
   );
   await characteristic.writeWithoutResponse(base64packet);
+  console.log('End writing to characteristic');
 }
 
 var connectedSubscription = null;
@@ -351,13 +357,17 @@ export const setupWebRTCConnection = () => {
     let transferTxCharacteristic = state.BLEs.transferTxCharacteristic;
     var yourConn = new RTCPeerConnection();
 
-    yourConn.onicecandidate = async (event) => {
+    yourConn.onicecandidate = async event => {
       console.log('onicecandidate');
       if (event.candidate) {
         var jsonCandidate = JSON.stringify(event.candidate);
-        //console.log('TX', transferTxCharacteristic);
-        console.log('jsonCandidate');
-        await writeCharacteristic(device, transferTxCharacteristic, jsonCandidate);
+        console.log('jsonCandidate', jsonCandidate);
+
+        console.log('Sending Ice candidate');
+        await queue.add(() =>
+          writeCharacteristic(device, transferTxCharacteristic, jsonCandidate),
+        );
+        console.log('Done: Write Ice candidate');
       }
     };
 
@@ -367,22 +377,25 @@ export const setupWebRTCConnection = () => {
     dispatch(webRTCConnectionStatus('Sending Offer'));
     var jsonOffer = JSON.stringify(offer);
 
-    //console.log('TX', transferTxCharacteristic);
-    //console.log('jsonOffer', jsonOffer);
-    await writeCharacteristic(device, transferTxCharacteristic, jsonOffer);
+    await queue.add(() =>
+      writeCharacteristic(device, transferTxCharacteristic, jsonOffer),
+    );
 
     console.log('Waiting Answer');
     dispatch(webRTCConnectionStatus('Waiting Answer'));
-    let answer = await awaitMessageFromCharacteristic(
-      transferRxCharacteristic,
-      10000,
-    );
-    let answerObject = JSON.parse(answer);
-    console.log('Answer Received');
-    //console.log('SDP: ', answerObject.sdp);
-    dispatch(
-      webRTCConnectionStatus(`Answer Received, SDP: ${answerObject.sdp}`),
-    );
-    await yourConn.setRemoteDescription(new RTCSessionDescription(answerObject));
+    subscribeToCharacteristic(transferRxCharacteristic, async message => {
+      let answerObject = JSON.parse(message);
+      if (answerObject.type === 'answer') {
+        console.log('Answer Received');
+        dispatch(
+          webRTCConnectionStatus(`Answer Received, SDP: ${answerObject.sdp}`),
+        );
+        await yourConn.setRemoteDescription(
+          new RTCSessionDescription(answerObject),
+        );
+      } else if (answerObject.candidate !== null) {
+        // Handle Remote candidate
+      }
+    });
   };
 };

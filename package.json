@@ -17,6 +17,7 @@
     "mobx": "^5.15.4",
     "mobx-react": "^6.2.2",
     "native-base": "^2.13.8",
+    "p-queue": "^6.4.0",
     "react": "16.9.0",
     "react-native": "^0.62.2",
     "react-native-ble-plx": "^2.0.0",
@@ -25,12 +26,12 @@
     "react-native-safe-area-context": "^0.7.3",
     "react-native-screens": "^2.0.0-beta.10",
     "react-native-swipe-list-view": "^2.2.0",
+    "react-native-webrtc": "^1.75.3",
     "react-redux": "^7.2.0",
     "redux": "^4.0.5",
     "redux-devtools-extension": "^2.13.8",
     "redux-thunk": "^2.3.0",
-    "text-encoding": "^0.7.0",
-    "react-native-webrtc": "^1.75.3"
+    "text-encoding": "^0.7.0"
   },
   "devDependencies": {
     "@babel/core": "^7.8.4",
