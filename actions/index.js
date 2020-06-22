@@ -351,6 +351,16 @@ export const setupWebRTCConnection = () => {
     let transferTxCharacteristic = state.BLEs.transferTxCharacteristic;
     var yourConn = new RTCPeerConnection();
 
+    yourConn.onicecandidate = async (event) => {
+      console.log('onicecandidate');
+      if (event.candidate) {
+        var jsonCandidate = JSON.stringify(event.candidate);
+        //console.log('TX', transferTxCharacteristic);
+        console.log('jsonCandidate');
+        await writeCharacteristic(device, transferTxCharacteristic, jsonCandidate);
+      }
+    };
+
     let offer = await createWebRTCOffer(dispatch, yourConn);
 
     console.log('Sending Offer');
@@ -373,26 +383,6 @@ export const setupWebRTCConnection = () => {
     dispatch(
       webRTCConnectionStatus(`Answer Received, SDP: ${answerObject.sdp}`),
     );
-    // TODO Handle Answer
-
-    try {
-      console.log('answerObject.sdp = ', answerObject.sdp);
-      var description = new RTCSessionDescription(answerObject.sdp)
-      console.log('new RTCSessionDescription SUCCESS');
-      await yourConn.setRemoteDescription(description);
-    } catch (e) {
-      console.log('Error: ', e);
-    }
-
-    console.log('Send ICE candidates');
-    yourConn.onicecandidate = async (event) => {
-      console.log('onicecandidate');
-      if (event.candidate) {
-        var jsonCandidate = JSON.stringify(event.candidate);
-        console.log('TX', transferTxCharacteristic);
-        console.log('jsonCandidate', jsonCandidate);
-        await writeCharacteristic(device, transferTxCharacteristic, jsonCandidate);
-      }
-    };
+    await yourConn.setRemoteDescription(new RTCSessionDescription(answerObject));
   };
 };

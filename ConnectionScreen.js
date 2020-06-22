@@ -1,5 +1,4 @@
-import React, {Component, useState} from 'react';
-import update from 'immutability-helper';
+import React, {Component} from 'react';
 import {
   ScrollView,
   SafeAreaView,
