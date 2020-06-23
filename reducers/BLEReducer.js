@@ -7,6 +7,7 @@ const INITIAL_STATE = {
   transferTxCharacteristic: null,
 
   webRTCLocalStreamUrl: null,
+  webRTCRemoteStreamUrl: null,
   webRTCConnectionStatus: '',
 };
 
@@ -32,6 +33,8 @@ const BLEReducer = (state = INITIAL_STATE, action) => {
       return update(state, {transferTxCharacteristic: {$set: action.value}});
     case 'WEBRTC_LOCAL_STREAM_URL':
       return update(state, {webRTCLocalStreamUrl: {$set: action.value}});
+    case 'WEBRTC_REMOTE_STREAM_URL':
+      return update(state, {webRTCRemoteStreamUrl: {$set: action.value}});
     case 'WEBRTC_CONNECTION_STATUS':
       return update(state, {webRTCConnectionStatus: {$set: action.value}});
     default:

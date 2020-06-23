@@ -41,6 +41,11 @@ export const webRTCLocalStreamUrl = value => ({
   value,
 });
 
+export const webRTCRemoteStreamUrl = value => ({
+  type: 'WEBRTC_REMOTE_STREAM_URL',
+  value,
+});
+
 export const webRTCConnectionStatus = value => ({
   type: 'WEBRTC_CONNECTION_STATUS',
   value,
@@ -380,6 +385,11 @@ export const setupWebRTCConnection = () => {
     };
 
     let offer = await createWebRTCOffer(dispatch, yourConn);
+
+    yourConn.onaddstream = event => {
+      console.log('On Add Stream', event);
+      dispatch(webRTCRemoteStreamUrl(event.stream.toURL()));
+    };
 
     console.log('Sending Offer');
     dispatch(webRTCConnectionStatus('Sending Offer'));

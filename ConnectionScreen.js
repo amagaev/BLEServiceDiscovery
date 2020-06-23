@@ -33,6 +33,18 @@ class ConnectionScreen extends Component {
       </>
     ) : null;
 
+    const webrtcContainer2 = this.props.webRTCRemoteStreamUrl ? (
+      <>
+        <View style={styles.videoContainer}>
+          <Text> Remote Video</Text>
+          <RTCView
+            streamURL={this.props.webRTCRemoteStreamUrl}
+            style={styles.localVideo}
+          />
+        </View>
+      </>
+    ) : null;
+
     const transferContainer =
       this.props.transferRxCharacteristic &&
       this.props.transferTxCharacteristic ? (
@@ -63,7 +75,7 @@ class ConnectionScreen extends Component {
           />
           <Text style={styles.statusText}>{this.props.peripheralStatus}</Text>
         </View>
-        {transferContainer}
+        {webrtcContainer2}
       </SafeAreaView>
     );
   }
@@ -77,6 +89,7 @@ function mapStateToProps(state) {
     transferTxCharacteristic: state.BLEs.transferTxCharacteristic,
 
     webRTCLocalStreamUrl: state.BLEs.webRTCLocalStreamUrl,
+    webRTCRemoteStreamUrl: state.BLEs.webRTCRemoteStreamUrl,
     webRTCConnectionStatus: state.BLEs.webRTCConnectionStatus,
   };
 }
