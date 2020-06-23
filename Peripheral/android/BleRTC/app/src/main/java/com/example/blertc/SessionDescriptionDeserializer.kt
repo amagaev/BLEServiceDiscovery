@@ -55,6 +55,8 @@ class ICESerializer : JsonSerializer<IceCandidate> {
     ): JsonElement? {
         val jsonObject = JsonObject()
         jsonObject.addProperty("candidate", src.sdp)
+        jsonObject.addProperty("sdpMid", src.sdpMid)
+        jsonObject.addProperty("sdpMLineIndex", src.sdpMLineIndex)
         return jsonObject
     }
 }

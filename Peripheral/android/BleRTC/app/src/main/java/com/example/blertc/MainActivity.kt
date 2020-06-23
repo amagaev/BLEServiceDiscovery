@@ -309,17 +309,20 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onIceCandidate(p0: IceCandidate?) {
                     Log.i(BleRTCTag, "!!! onIceCandidate")
-                    super.onIceCandidate(p0)
 
-                    val iceGson: Gson = GsonBuilder()
-                        .registerTypeAdapter(
-                            IceCandidate::class.java,
-                            ICEDeserializer()
-                        )
-                        .registerTypeAdapter(IceCandidate::class.java, ICESerializer())
-                        .create()
+                    if (p0 != null) {
+                        super.onIceCandidate(p0)
 
-                    sendData(iceGson.toJson(p0!!))
+                        val iceGson: Gson = GsonBuilder()
+                            .registerTypeAdapter(
+                                IceCandidate::class.java,
+                                ICEDeserializer()
+                            )
+                            .registerTypeAdapter(IceCandidate::class.java, ICESerializer())
+                            .create()
+
+                        sendData(iceGson.toJson(p0!!))
+                    }
                 }
 
                 override fun onAddStream(p0: MediaStream?) {
