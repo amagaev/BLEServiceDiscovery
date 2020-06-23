@@ -30,8 +30,11 @@ import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import org.webrtc.IceCandidate
 import org.webrtc.MediaStream
+import org.webrtc.PeerConnection
 import org.webrtc.SessionDescription
 import java.io.UnsupportedEncodingException
+import java.util.concurrent.BlockingQueue
+import java.util.concurrent.LinkedTransferQueue
 
 @ExperimentalCoroutinesApi
 @KtorExperimentalAPI
@@ -42,7 +45,6 @@ class MainActivity : AppCompatActivity() {
         private const val CAMERA_PERMISSION = Manifest.permission.CAMERA
     }
 
-    private lateinit var signallingClient: SignallingClient
     private lateinit var rtcClient: RTCClient
     private lateinit var bluetoothManager: BluetoothManager
     private val BleRTCTag: String = "BleRTC"
@@ -123,19 +125,11 @@ class MainActivity : AppCompatActivity() {
         bluetoothGattServer?.notifyCharacteristicChanged(device, txCharacteristic, false)
     }
 
-    fun sendData(message: String, device: BluetoothDevice) {
-        try {
-            object : Thread() {
-                override fun run() {
+    private val sendingQueue: BlockingQueue<String> = LinkedTransferQueue<String>()
+    private var sendingThread: Thread? = null
 
-                    performSend(message, device)
-                }
-            }.start()
-
-        } catch (e: Exception) {
-            // Part of my library - commented for this example
-            // this.activity.extShowException (e)
-        }
+    fun sendData(message: String) {
+        sendingQueue.add(message)
     }
 
     private val gattServerCallback = object : BluetoothGattServerCallback() {
@@ -145,7 +139,23 @@ class MainActivity : AppCompatActivity() {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 Log.i("TAG", "BluetoothDevice CONNECTED: $device")
                 registeredDevices.add(device)
+
+                sendingThread = Thread({
+                    try {
+                        while (true) {
+                           var message = sendingQueue.take();
+                            performSend(message, registeredDevices.first())
+                        }
+                    } catch (ex: InterruptedException) {
+
+                    }
+                })
+                sendingThread?.start()
+
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                sendingThread?.interrupt()
+                sendingThread = null
+                sendingQueue.clear()
                 Log.i("TAG", "BluetoothDevice DISCONNECTED: $device")
                 //Remove device from any active subscriptions
                 registeredDevices.remove(device)
@@ -193,7 +203,7 @@ class MainActivity : AppCompatActivity() {
                             data = ByteArray(0)
                             Log.i("TAG", message)
                             if (device != null) {
-                                onDataReceived(message, device)
+                                onDataReceived(message)
                             }
                         } else {
                             data += it
@@ -229,13 +239,6 @@ class MainActivity : AppCompatActivity() {
                 )
             }
             Log.i("TAG", "onDescriptorWriteRequest")
-        }
-    }
-
-    private val sdpObserver = object : AppSdpObserver() {
-        override fun onCreateSuccess(p0: SessionDescription?) {
-            super.onCreateSuccess(p0)
-            signallingClient.send(p0)
         }
     }
 
@@ -280,11 +283,34 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onCameraPermissionGranted() {
+        Log.i(BleRTCTag, "!!! onCameraPermissionGranted")
         rtcClient = RTCClient(
             application,
             object : PeerConnectionObserver() {
+                override fun onIceGatheringChange(p0: PeerConnection.IceGatheringState?) {
+//                    super.onIceGatheringChange(p0)
+                    Log.i(BleRTCTag, "!!! onIceGatheringChange")
+                }
+
+                override fun onIceCandidatesRemoved(p0: Array<out IceCandidate>?) {
+//                    super.onIceCandidatesRemoved(p0)
+                    Log.i(BleRTCTag, "!!! onIceCandidatesRemoved")
+                }
+
+                override fun onIceConnectionChange(p0: PeerConnection.IceConnectionState?) {
+//                    super.onIceConnectionChange(p0)
+                    Log.i(BleRTCTag, "!!! onIceConnectionChange")
+                }
+
+                override fun onIceConnectionReceivingChange(p0: Boolean) {
+//                    super.onIceConnectionReceivingChange(p0)
+                    Log.i(BleRTCTag, "!!! onIceConnectionReceivingChange")
+                }
+
                 override fun onIceCandidate(p0: IceCandidate?) {
+                    Log.i(BleRTCTag, "!!! onIceCandidate")
                     super.onIceCandidate(p0)
+
                     val iceGson: Gson = GsonBuilder()
                         .registerTypeAdapter(
                             IceCandidate::class.java,
@@ -293,12 +319,12 @@ class MainActivity : AppCompatActivity() {
                         .registerTypeAdapter(IceCandidate::class.java, ICESerializer())
                         .create()
 
-                    sendData(iceGson.toJson(p0!!), registeredDevices.first())
-                    rtcClient.addIceCandidate(p0)
+                    sendData(iceGson.toJson(p0!!))
                 }
 
                 override fun onAddStream(p0: MediaStream?) {
                     super.onAddStream(p0)
+                    Log.i(BleRTCTag, "!!! onAddStream")
                     p0?.videoTracks?.get(0)?.addSink(remote_view)
                 }
             }
@@ -306,28 +332,6 @@ class MainActivity : AppCompatActivity() {
         rtcClient.initSurfaceView(remote_view)
         rtcClient.initSurfaceView(local_view)
         rtcClient.startLocalVideoCapture(local_view)
-        signallingClient = SignallingClient(createSignallingClientListener())
-    }
-
-    private fun createSignallingClientListener() = object : SignallingClientListener {
-        override fun onConnectionEstablished() {
-            call_button.isClickable = true
-        }
-
-        override fun onOfferReceived(description: SessionDescription) {
-            rtcClient.onRemoteSessionReceived(description)
-            rtcClient.answer(sdpObserver)
-            remote_view_loading.isGone = true
-        }
-
-        override fun onAnswerReceived(description: SessionDescription) {
-            rtcClient.onRemoteSessionReceived(description)
-            remote_view_loading.isGone = true
-        }
-
-        override fun onIceCandidateReceived(iceCandidate: IceCandidate) {
-            rtcClient.addIceCandidate(iceCandidate)
-        }
     }
 
     private fun requestCameraPermission(dialogShown: Boolean = false) {
@@ -441,7 +445,7 @@ class MainActivity : AppCompatActivity() {
         unregisterReceiver(bluetoothReceiver)
     }
 
-    fun onDataReceived(data: String, device: BluetoothDevice) {
+    fun onDataReceived(data: String) {
         Log.i(BleRTCTag, "onDataReceived")
 
         val gson = Gson()
@@ -456,7 +460,7 @@ class MainActivity : AppCompatActivity() {
                 .registerTypeAdapter(IceCandidate::class.java, ICESerializer())
                 .create()
             val candidate = iceGson.fromJson(data, IceCandidate::class.java)
-            rtcClient.addIceCandidate(candidate)
+//            rtcClient.addIceCandidate(candidate)
         } else {
             val offerGson: Gson = GsonBuilder()
                 .registerTypeAdapter(
@@ -468,14 +472,40 @@ class MainActivity : AppCompatActivity() {
             val sessionDescription = offerGson.fromJson(data, SessionDescription::class.java)
             if (sessionDescription.type == SessionDescription.Type.OFFER) {
                 Log.i(BleRTCTag, "Offer")
-                rtcClient.onRemoteSessionReceived(sessionDescription)
-                rtcClient.answer(object : AppSdpObserver() {
-                    override fun onCreateSuccess(p0: SessionDescription?) {
-                        super.onCreateSuccess(p0)
-                        Log.i(BleRTCTag, "Send answer")
-                        sendData(offerGson.toJson(p0!!), device)
+                rtcClient.iceCandidateState()
+                rtcClient.onRemoteSessionReceived(sessionDescription, object : AppSdpObserver() {
+                    override fun onSetSuccess() {
+                        Log.i("!!!!", "!!! onSetSuccess")
+                        rtcClient.iceCandidateState()
+                        super.onSetSuccess()
+                        rtcClient.answer(object : AppSdpObserver() {
+                            override fun onCreateSuccess(p0: SessionDescription?) {
+                                rtcClient.iceCandidateState()
+                                super.onCreateSuccess(p0)
+                                rtcClient.setLocalDescription(p0!!, object : AppSdpObserver() {
+                                    override fun onSetSuccess() {
+                                        super.onSetSuccess()
+
+                                        rtcClient.iceCandidateState()
+                                        Log.i(BleRTCTag, "On Set local DESC")
+                                        sendData(offerGson.toJson(p0!!))
+                                    }
+
+                                    override fun onSetFailure(p0: String?) {
+                                        super.onSetFailure(p0)
+                                        Log.i(BleRTCTag, "onSetFailure ${p0}")
+                                    }
+                                })
+                            }
+
+                            override fun onCreateFailure(p0: String?) {
+                                super.onCreateFailure(p0)
+                                Log.i(BleRTCTag, "onCreateFailure ${p0}")
+                            }
+                        })
                     }
                 })
+
             }
         }
     }

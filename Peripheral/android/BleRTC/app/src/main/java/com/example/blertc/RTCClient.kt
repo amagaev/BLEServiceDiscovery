@@ -2,6 +2,7 @@ package com.example.blertc
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import org.webrtc.*
 
 class RTCClient(
@@ -44,8 +45,6 @@ class RTCClient(
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(rootEglBase.eglBaseContext))
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(rootEglBase.eglBaseContext, true, true))
             .setOptions(PeerConnectionFactory.Options().apply {
-                disableEncryption = true
-                disableNetworkMonitor = true
             })
             .createPeerConnectionFactory()
     }
@@ -88,20 +87,7 @@ class RTCClient(
 
         createOffer(object : SdpObserver by sdpObserver {
             override fun onCreateSuccess(desc: SessionDescription?) {
-                setLocalDescription(object : SdpObserver {
-                    override fun onSetFailure(p0: String?) {
-                    }
-
-                    override fun onSetSuccess() {
-                    }
-
-                    override fun onCreateSuccess(p0: SessionDescription?) {
-                    }
-
-                    override fun onCreateFailure(p0: String?) {
-                    }
-                }, desc)
-                sdpObserver.onCreateSuccess(desc)
+                setLocalDescription(sdpObserver, desc)
             }
         }, constraints)
     }
@@ -109,44 +95,25 @@ class RTCClient(
     private fun PeerConnection.answer(sdpObserver: SdpObserver) {
         val constraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
+            mandatory.add(MediaConstraints.KeyValuePair("offerToReceiveAudio", "true"))
         }
 
-        createAnswer(object : SdpObserver by sdpObserver {
-            override fun onCreateSuccess(p0: SessionDescription?) {
-                setLocalDescription(object : SdpObserver {
-                    override fun onSetFailure(p0: String?) {
-                    }
-
-                    override fun onSetSuccess() {
-                    }
-
-                    override fun onCreateSuccess(p0: SessionDescription?) {
-                    }
-
-                    override fun onCreateFailure(p0: String?) {
-                    }
-                }, p0)
-                sdpObserver.onCreateSuccess(p0)
-            }
-        }, constraints)
+        createAnswer(sdpObserver, constraints)
     }
+
+
+    fun iceCandidateState() {
+        Log.i("!!!!", "!!! iceConnectionState ${peerConnection?.iceConnectionState()}")
+        Log.i("!!!!", "!!! iceGatheringState ${peerConnection?.iceGatheringState()}")
+    }
+
+    fun setLocalDescription(sessionDescription: SessionDescription, sdpObserver: SdpObserver) = peerConnection?.setLocalDescription(sdpObserver, sessionDescription)
 
     fun answer(sdpObserver: SdpObserver) = peerConnection?.answer(sdpObserver)
 
-    fun onRemoteSessionReceived(sessionDescription: SessionDescription) {
-        peerConnection?.setRemoteDescription(object : SdpObserver {
-            override fun onSetFailure(p0: String?) {
-            }
-
-            override fun onSetSuccess() {
-            }
-
-            override fun onCreateSuccess(p0: SessionDescription?) {
-            }
-
-            override fun onCreateFailure(p0: String?) {
-            }
-        }, sessionDescription)
+    fun onRemoteSessionReceived(sessionDescription: SessionDescription, sdpObserver: SdpObserver) {
+        Log.i("!!!!", "!!! onRemoteSessionReceived")
+        peerConnection?.setRemoteDescription(sdpObserver, sessionDescription)
     }
 
     fun addIceCandidate(iceCandidate: IceCandidate?) {

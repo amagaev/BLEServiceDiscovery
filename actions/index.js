@@ -355,7 +355,15 @@ export const setupWebRTCConnection = () => {
     let device = state.BLEs.connectedPeripheral;
     let transferRxCharacteristic = state.BLEs.transferRxCharacteristic;
     let transferTxCharacteristic = state.BLEs.transferTxCharacteristic;
-    var yourConn = new RTCPeerConnection();
+    // var yourConn = new RTCPeerConnection();
+
+    const yourConn = new RTCPeerConnection({
+      configuration: {
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      },
+      iceServers: [{urls: 'stun:stun.l.google.com:19302'}],
+    });
 
     yourConn.onicecandidate = async event => {
       console.log('onicecandidate');
@@ -393,8 +401,10 @@ export const setupWebRTCConnection = () => {
         await yourConn.setRemoteDescription(
           new RTCSessionDescription(answerObject),
         );
+        console.log('setRemoteDescription completed');
       } else if (answerObject.candidate !== null) {
         // Handle Remote candidate
+        await yourConn.addIceCandidate(answerObject);
       }
     });
   };
