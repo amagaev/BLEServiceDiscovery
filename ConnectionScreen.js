@@ -49,11 +49,6 @@ class ConnectionScreen extends Component {
       this.props.transferRxCharacteristic &&
       this.props.transferTxCharacteristic ? (
         <>
-          <ScrollView style={styles.scrollView}>
-            <Text style={styles.messageText}>
-              {this.props.webRTCConnectionStatus}
-            </Text>
-          </ScrollView>
           <View style={styles.buttonContainer}>
             <Button
               title="Start WebRTC"
@@ -65,6 +60,7 @@ class ConnectionScreen extends Component {
     return (
       <SafeAreaView style={styles.container}>
         {webrtcContainer}
+        {webrtcContainer2}
         <View style={styles.statusContainer}>
           <View
             style={
@@ -75,7 +71,7 @@ class ConnectionScreen extends Component {
           />
           <Text style={styles.statusText}>{this.props.peripheralStatus}</Text>
         </View>
-        {webrtcContainer2}
+        {transferContainer}
       </SafeAreaView>
     );
   }
