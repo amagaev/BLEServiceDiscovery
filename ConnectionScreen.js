@@ -1,19 +1,53 @@
-import React, {Component} from 'react';
+import React, { Component } from 'react';
 import {
   ScrollView,
   SafeAreaView,
   StyleSheet,
+  PermissionsAndroid,
   Text,
   Button,
   View,
 } from 'react-native';
-import {connect} from 'react-redux';
-import {RTCView} from 'react-native-webrtc';
-import {connectToPeripheral, setupWebRTCConnection} from './actions';
+import { connect } from 'react-redux';
+import { RTCView } from 'react-native-webrtc';
+import {
+  connectToPeripheral,
+  setupWebRTCConnection,
+} from './actions';
 
 class ConnectionScreen extends Component {
-  componentDidMount() {
+
+  requestLocationPermission = async () => {
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: "WebRTC App Location Permission",
+          message:
+            "WebRTC App needs access to your location " +
+            "so you can take connect with bluetooth.",
+          buttonNeutral: "Ask Me Later",
+          buttonNegative: "Cancel",
+          buttonPositive: "OK"
+        }
+      );
+      if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+        console.log("You can use the location permission");
+      } else {
+        console.log("ACCESS_FINE_LOCATION permission denied");
+      }
+    } catch (err) {
+      console.warn(err);
+    }
+  };
+
+  componentMount = async () => {
+    await this.requestLocationPermission();
     this.props.connectToPeripheral();
+  };
+
+  componentDidMount() {
+    this.componentMount();
   }
 
   onStartWebrtcCommandButtonClick = () => {
@@ -47,16 +81,16 @@ class ConnectionScreen extends Component {
 
     const transferContainer =
       this.props.transferRxCharacteristic &&
-      this.props.transferTxCharacteristic ? (
-        <>
-          <View style={styles.buttonContainer}>
-            <Button
-              title="Start WebRTC"
-              onPress={() => this.onStartWebrtcCommandButtonClick()}
-            />
-          </View>
-        </>
-      ) : null;
+        this.props.transferTxCharacteristic ? (
+          <>
+            <View style={styles.buttonContainer}>
+              <Button
+                title="Start WebRTC"
+                onPress={() => this.onStartWebrtcCommandButtonClick()}
+              />
+            </View>
+          </>
+        ) : null;
     return (
       <SafeAreaView style={styles.container}>
         {webrtcContainer}
