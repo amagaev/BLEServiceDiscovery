@@ -6,6 +6,7 @@ import {
   PermissionsAndroid,
   Text,
   Button,
+  Platform,
   View,
 } from 'react-native';
 import { connect } from 'react-redux';
@@ -42,7 +43,10 @@ class ConnectionScreen extends Component {
   };
 
   componentMount = async () => {
-    await this.requestLocationPermission();
+    if (Platform.OS === 'android')
+    {
+      await this.requestLocationPermission();
+    }
     this.props.connectToPeripheral();
   };
 
